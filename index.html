@@ -9,6 +9,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script src="https://unpkg.com/wellknown@0.5.0/wellknown.js"></script>
+    <script src="https://bundle.run/buffer@6.0.3"></script>
     <script src="https://bundle.run/wkx@0.5.0"></script>
 
     <style>
@@ -28,6 +29,7 @@
     <p style="font-size: 0.8rem; color: #666;">Paste GeoJSON, WKT, or WKB(Hex)</p>
     <textarea id="dataInput" placeholder='{"type": "Point", ...} &#10;or POLYGON((...)) &#10;or 01010000... (Hex)'></textarea>
     <button onclick="visualizeData()">Visualize on Map</button>
+    <button onclick="clearMap()" style="margin-top: 5px; background-color: #d32f2f;">Clear Map</button>
 </div>
 
 <div id="map"></div>
@@ -39,34 +41,66 @@
 
     let currentLayer;
 
-    function visualizeData() {
-        const input = document.getElementById('dataInput').value.trim();
-        if (!input) return;
+   function visualizeData() {
+    const input = document.getElementById('dataInput').value.trim();
+    if (!input) return;
 
-        let geojson;
+    console.log("Loco Debug: Processing input...");
 
-        try {
-            if (input.startsWith('{')) {
-                // 1. GeoJSON 처리
-                geojson = JSON.parse(input);
-            } else if (input.match(/^[0-9a-fA-F]+$/)) {
-                // 2. WKB(Hex) 처리
-                const Buffer = wkx.Buffer;
-                const geometry = wkx.Geometry.parse(Buffer.from(input, 'hex'));
-                geojson = geometry.toGeoJSON();
+    let geojson;
+
+    try {
+        if (input.startsWith('{')) {
+            // 1. GeoJSON
+            geojson = JSON.parse(input);
+        } else if (/^[0-9a-fA-F]+$/.test(input)) {
+            // 2. WKB (Hex) - wkx 라이브러리를 사용하여 파싱
+            const Buffer = (window.buffer && window.buffer.Buffer) || window.Buffer;
+            let bufferData;
+
+            if (Buffer) {
+                bufferData = Buffer.from(input, 'hex');
             } else {
-                // 3. WKT 처리
-                geojson = wellknown.parse(input);
+                bufferData = new Uint8Array(input.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
             }
 
-            if (geojson) {
-                if (currentLayer) map.removeLayer(currentLayer);
-                currentLayer = L.geoJSON(geojson).addTo(map);
-                map.fitBounds(currentLayer.getBounds());
-            }
-        } catch (e) {
-            alert('데이터 해석에 실패했습니다: ' + e.message);
+            const wkxObj = window.wkx || wkx;
+            // wkx.parse가 아니라 wkx.Geometry.parse가 올바른 API입니다.
+            const geometry = wkxObj.Geometry.parse(bufferData);
+            geojson = geometry.toGeoJSON();
+        } else {
+            // 3. WKT
+            console.log("Loco Debug: WKT detected");
+            geojson = wellknown.parse(input);
         }
+
+        if (geojson) {
+            renderOnMap(geojson);
+        }
+    } catch (e) {
+        console.error("Loco Error:", e);
+        alert('해석 실패: ' + e.message);
+    }
+}
+    
+    // 렌더링 로직 분리 (가독성 위해)
+    function renderOnMap(geojson) {
+        if (currentLayer) map.removeLayer(currentLayer);
+        
+        currentLayer = L.geoJSON(geojson).addTo(map);
+        
+        // 데이터 위치로 지도 자동 이동
+        const bounds = currentLayer.getBounds();
+        if (bounds.isValid()) {
+            // 포인트(Point) 데이터의 경우 줌이 너무 당겨지는 것을 방지하기 위해 maxZoom 설정
+            map.fitBounds(bounds, { maxZoom: 16, padding: [50, 50] });
+        }
+    }
+
+    function clearMap() {
+        if (currentLayer) map.removeLayer(currentLayer);
+        currentLayer = null;
+        document.getElementById('dataInput').value = '';
     }
 </script>
 
