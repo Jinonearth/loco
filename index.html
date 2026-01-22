@@ -39,39 +39,63 @@
     const map = L.map('map').setView([37.5665, 126.9780], 12);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
+    // 전역 유틸리티 객체 설정
+    const Buffer = (window.buffer && window.buffer.Buffer) || window.Buffer;
+    const wkxObj = window.wkx || wkx;
+
     let currentLayer;
 
    function visualizeData() {
-    const input = document.getElementById('dataInput').value.trim();
+    let input = document.getElementById('dataInput').value.trim();
     if (!input) return;
-
     console.log("Loco Debug: Processing input...");
 
+    // Base64 (GeoJSON, WKT, or WKB) - JSON이나 Hex가 아닌 경우에만 체크
+    if (!input.startsWith('{') && !/^[0-9a-fA-F]+$/.test(input) && /^[A-Za-z0-9+/]+={0,2}$/.test(input)) {
+        console.log("Loco Debug: Base64 detected, decoding...");
+        const bufferData = Buffer.from(input, 'base64');
+        const decodedStr = bufferData.toString('utf8').trim();
+
+        // 디코딩된 결과가 텍스트(JSON, WKT, Hex)인지 바이너리인지 판단
+        if (decodedStr.startsWith('{') || (/^[A-Z]/.test(decodedStr) && decodedStr.includes('(')) || /^[0-9a-fA-F]+$/.test(decodedStr)) {
+            input = decodedStr;
+        } else {
+            input = bufferData;
+        }
+    }
+    processInput(input);
+}
+
+function processInput(input) {
     let geojson;
 
     try {
-        if (input.startsWith('{')) {
-            // 1. GeoJSON
-            geojson = JSON.parse(input);
-        } else if (/^[0-9a-fA-F]+$/.test(input)) {
-            // 2. WKB (Hex) - wkx 라이브러리를 사용하여 파싱
-            const Buffer = (window.buffer && window.buffer.Buffer) || window.Buffer;
-            let bufferData;
-
-            if (Buffer) {
-                bufferData = Buffer.from(input, 'hex');
-            } else {
-                bufferData = new Uint8Array(input.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-            }
-
-            const wkxObj = window.wkx || wkx;
-            // wkx.parse가 아니라 wkx.Geometry.parse가 올바른 API입니다.
-            const geometry = wkxObj.Geometry.parse(bufferData);
+        // 1. Buffer 객체인 경우 (Base64에서 디코딩된 WKB)
+        if (typeof input !== 'string' && (input instanceof Uint8Array || (Buffer && Buffer.isBuffer(input)))) {
+            const geometry = wkxObj.Geometry.parse(input);
             geojson = geometry.toGeoJSON();
-        } else {
-            // 3. WKT
-            console.log("Loco Debug: WKT detected");
-            geojson = wellknown.parse(input);
+        } 
+        // 2. 문자열인 경우
+        else if (typeof input === 'string') {
+            if (input.startsWith('{')) {
+                // GeoJSON
+                geojson = JSON.parse(input);
+            } else if (/^[0-9a-fA-F]+$/.test(input)) {
+                // WKB (Hex)
+                console.log("Loco Debug: WKB Hex detected");
+                let bufferData;
+                if (Buffer) {
+                    bufferData = Buffer.from(input, 'hex');
+                } else {
+                    bufferData = new Uint8Array(input.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
+                }
+                const geometry = wkxObj.Geometry.parse(bufferData);
+                geojson = geometry.toGeoJSON();
+            } else {
+                // WKT
+                console.log("Loco Debug: WKT detected:", input);
+                geojson = wellknown.parse(input);
+            }
         }
 
         if (geojson) {
