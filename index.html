@@ -28,7 +28,7 @@
     <h2>Loco: Data Input</h2>
     <p style="font-size: 0.8rem; color: #666;">Paste GeoJSON, WKT, or WKB(Hex)</p>
     <textarea id="dataInput" placeholder='{"type": "Point", ...} &#10;or POLYGON((...)) &#10;or 01010000... (Hex)'></textarea>
-    <button onclick="visualizeData()">Visualize on Map</button>
+    <div id="errorMessage" style="color: #d32f2f; font-size: 0.8rem; margin-bottom: 5px; min-height: 15px;"></div>
     <button onclick="clearMap()" style="margin-top: 5px; background-color: #d32f2f;">Clear Map</button>
 </div>
 
@@ -44,10 +44,20 @@
     const wkxObj = window.wkx || wkx;
 
     let currentLayer;
+    let debounceTimer;
+
+    // 입력 감지: 1초(1000ms) 동안 입력이 없으면 visualizeData 실행
+    document.getElementById('dataInput').addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(visualizeData, 1000);
+    });
 
    function visualizeData() {
     let input = document.getElementById('dataInput').value.trim();
-    if (!input) return;
+    if (!input) {
+        document.getElementById('errorMessage').textContent = '';
+        return;
+    }
     console.log("Loco Debug: Processing input...");
 
     // Base64 (GeoJSON, WKT, or WKB) - JSON이나 Hex가 아닌 경우에만 체크
@@ -67,6 +77,7 @@
 }
 
 function processInput(input) {
+    document.getElementById('errorMessage').textContent = '';
     let geojson;
 
     try {
@@ -103,7 +114,7 @@ function processInput(input) {
         }
     } catch (e) {
         console.error("Loco Error:", e);
-        alert('해석 실패: ' + e.message);
+        document.getElementById('errorMessage').textContent = 'Error: ' + e.message;
     }
 }
     
@@ -125,6 +136,7 @@ function processInput(input) {
         if (currentLayer) map.removeLayer(currentLayer);
         currentLayer = null;
         document.getElementById('dataInput').value = '';
+        document.getElementById('errorMessage').textContent = '';
     }
 </script>
 
