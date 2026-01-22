@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Loco - Spatial Viewer</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script src="https://unpkg.com/wellknown@0.5.0/wellknown.js"></script>
+    <script src="https://bundle.run/wkx@0.5.0"></script>
+
+    <style>
+        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
+        #sidebar { width: 400px; display: flex; flex-direction: column; border-right: 1px solid #ccc; padding: 15px; box-sizing: border-box; }
+        #map { flex: 1; }
+        textarea { flex: 1; margin-bottom: 10px; font-family: monospace; padding: 10px; }
+        button { padding: 10px; cursor: pointer; background: #333; color: white; border: none; border-radius: 4px; }
+        button:hover { background: #555; }
+        h2 { margin-top: 0; font-size: 1.2rem; }
+    </style>
+</head>
+<body>
+
+<div id="sidebar">
+    <h2>Loco: Data Input</h2>
+    <p style="font-size: 0.8rem; color: #666;">Paste GeoJSON, WKT, or WKB(Hex)</p>
+    <textarea id="dataInput" placeholder='{"type": "Point", ...} &#10;or POLYGON((...)) &#10;or 01010000... (Hex)'></textarea>
+    <button onclick="visualizeData()">Visualize on Map</button>
+</div>
+
+<div id="map"></div>
+
+<script>
+    // 지도 초기화 (서울 중심)
+    const map = L.map('map').setView([37.5665, 126.9780], 12);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+
+    let currentLayer;
+
+    function visualizeData() {
+        const input = document.getElementById('dataInput').value.trim();
+        if (!input) return;
+
+        let geojson;
+
+        try {
+            if (input.startsWith('{')) {
+                // 1. GeoJSON 처리
+                geojson = JSON.parse(input);
+            } else if (input.match(/^[0-9a-fA-F]+$/)) {
+                // 2. WKB(Hex) 처리
+                const Buffer = wkx.Buffer;
+                const geometry = wkx.Geometry.parse(Buffer.from(input, 'hex'));
+                geojson = geometry.toGeoJSON();
+            } else {
+                // 3. WKT 처리
+                geojson = wellknown.parse(input);
+            }
+
+            if (geojson) {
+                if (currentLayer) map.removeLayer(currentLayer);
+                currentLayer = L.geoJSON(geojson).addTo(map);
+                map.fitBounds(currentLayer.getBounds());
+            }
+        } catch (e) {
+            alert('데이터 해석에 실패했습니다: ' + e.message);
+        }
+    }
+</script>
+
+</body>
+</html>
