@@ -52,6 +52,20 @@
         debounceTimer = setTimeout(visualizeData, 1000);
     });
 
+   function cleanupHexPrefix(s) {
+    if (typeof s !== 'string') {
+        return s;
+    }
+    // 추가적인 방어 코드: s가 문자열이 확실하더라도 toLowerCase 메서드가 없는 예외적인 경우를 대비합니다.
+    if (s.startsWith('0x')) {
+        return s.substring(2).trim();
+    }
+    if (s.startsWith('\\x')) {
+        return s.replace(/\\x/g, '');
+    }
+    return s;
+}
+
    function visualizeData() {
     let input = document.getElementById('dataInput').value.trim();
     if (!input) {
@@ -61,18 +75,31 @@
     console.log("Loco Debug: Processing input...");
 
     // Base64 (GeoJSON, WKT, or WKB) - JSON이나 Hex가 아닌 경우에만 체크
-    if (!input.startsWith('{') && !/^[0-9a-fA-F]+$/.test(input) && /^[A-Za-z0-9+/]+={0,2}$/.test(input)) {
+    if (!input.startsWith('{') &&
+        !input.toLowerCase().startsWith('0x') &&
+        !input.startsWith('\\x') &&
+        !/^[0-9a-fA-F]+$/.test(input) &&
+        /^[A-Za-z0-9+/]+={0,2}$/.test(input)) {
         console.log("Loco Debug: Base64 detected, decoding...");
         const bufferData = Buffer.from(input, 'base64');
         const decodedStr = bufferData.toString('utf8').trim();
 
+        // 디코딩된 문자열이 0x나 \x로 시작하는 경우 정리하여 판단
+        const checkStr = cleanupHexPrefix(decodedStr);
+
         // 디코딩된 결과가 텍스트(JSON, WKT, Hex)인지 바이너리인지 판단
-        if (decodedStr.startsWith('{') || (/^[A-Z]/.test(decodedStr) && decodedStr.includes('(')) || /^[0-9a-fA-F]+$/.test(decodedStr)) {
-            input = decodedStr;
+        if (checkStr.startsWith('{') || (/^[A-Z]/.test(checkStr) && checkStr.includes('(')) || /^[0-9a-fA-F]+$/.test(checkStr)) {
+            input = decodedStr; // 원본 디코딩 문자열을 사용하고, 최종 정리 단계에서 접두사를 처리합니다.
         } else {
             input = bufferData;
-        }
+        }     
     }
+
+    // Hex 접두사 정리 (문자열인 경우에만)
+    if (typeof input === 'string') {
+        input = cleanupHexPrefix(input);
+    }
+    
     processInput(input);
 }
 
