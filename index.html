@@ -12,15 +12,7 @@
     <script src="https://bundle.run/buffer@6.0.3"></script>
     <script src="https://bundle.run/wkx@0.5.0"></script>
 
-    <style>
-        body { margin: 0; display: flex; height: 100vh; font-family: sans-serif; }
-        #sidebar { width: 400px; display: flex; flex-direction: column; border-right: 1px solid #ccc; padding: 15px; box-sizing: border-box; }
-        #map { flex: 1; }
-        textarea { flex: 1; margin-bottom: 10px; font-family: monospace; padding: 10px; }
-        button { padding: 10px; cursor: pointer; background: #333; color: white; border: none; border-radius: 4px; }
-        button:hover { background: #555; }
-        h2 { margin-top: 0; font-size: 1.2rem; }
-    </style>
+    <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
 
@@ -29,143 +21,14 @@
     <p style="font-size: 0.8rem; color: #666;">Paste GeoJSON, WKT, or WKB(Hex)</p>
     <textarea id="dataInput" placeholder='{"type": "Point", ...} &#10;or POLYGON((...)) &#10;or 01010000... (Hex)'></textarea>
     <div id="errorMessage" style="color: #d32f2f; font-size: 0.8rem; margin-bottom: 5px; min-height: 15px;"></div>
-    <button onclick="clearMap()" style="margin-top: 5px; background-color: #d32f2f;">Clear Map</button>
+    <button id="clearButton" style="margin-top: 5px; background-color: #d32f2f;">Clear Map</button>
 </div>
 
 <div id="map"></div>
 
-<script>
-    // 지도 초기화 (서울 중심)
-    const map = L.map('map').setView([37.5665, 126.9780], 12);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
-
-    // 전역 유틸리티 객체 설정
-    const Buffer = (window.buffer && window.buffer.Buffer) || window.Buffer;
-    const wkxObj = window.wkx || wkx;
-
-    let currentLayer;
-    let debounceTimer;
-
-    // 입력 감지: 1초(1000ms) 동안 입력이 없으면 visualizeData 실행
-    document.getElementById('dataInput').addEventListener('input', function() {
-        clearTimeout(debounceTimer);
-        debounceTimer = setTimeout(visualizeData, 1000);
-    });
-
-   function cleanupHexPrefix(s) {
-    if (typeof s !== 'string') {
-        return s;
-    }
-    // 추가적인 방어 코드: s가 문자열이 확실하더라도 toLowerCase 메서드가 없는 예외적인 경우를 대비합니다.
-    if (s.startsWith('0x')) {
-        return s.substring(2).trim();
-    }
-    if (s.startsWith('\\x')) {
-        return s.replace(/\\x/g, '');
-    }
-    return s;
-}
-
-   function visualizeData() {
-    let input = document.getElementById('dataInput').value.trim();
-    if (!input) {
-        document.getElementById('errorMessage').textContent = '';
-        return;
-    }
-    console.log("Loco Debug: Processing input...");
-
-    // Base64 (GeoJSON, WKT, or WKB) - JSON이나 Hex가 아닌 경우에만 체크
-    if (!input.startsWith('{') &&
-        !input.toLowerCase().startsWith('0x') &&
-        !input.startsWith('\\x') &&
-        !/^[0-9a-fA-F]+$/.test(input) &&
-        /^[A-Za-z0-9+/]+={0,2}$/.test(input)) {
-        console.log("Loco Debug: Base64 detected, decoding...");
-        const bufferData = Buffer.from(input, 'base64');
-        const decodedStr = bufferData.toString('utf8').trim();
-
-        // 디코딩된 문자열이 0x나 \x로 시작하는 경우 정리하여 판단
-        const checkStr = cleanupHexPrefix(decodedStr);
-
-        // 디코딩된 결과가 텍스트(JSON, WKT, Hex)인지 바이너리인지 판단
-        if (checkStr.startsWith('{') || (/^[A-Z]/.test(checkStr) && checkStr.includes('(')) || /^[0-9a-fA-F]+$/.test(checkStr)) {
-            input = decodedStr; // 원본 디코딩 문자열을 사용하고, 최종 정리 단계에서 접두사를 처리합니다.
-        } else {
-            input = bufferData;
-        }     
-    }
-
-    // Hex 접두사 정리 (문자열인 경우에만)
-    if (typeof input === 'string') {
-        input = cleanupHexPrefix(input);
-    }
-    
-    processInput(input);
-}
-
-function processInput(input) {
-    document.getElementById('errorMessage').textContent = '';
-    let geojson;
-
-    try {
-        // 1. Buffer 객체인 경우 (Base64에서 디코딩된 WKB)
-        if (typeof input !== 'string' && (input instanceof Uint8Array || (Buffer && Buffer.isBuffer(input)))) {
-            const geometry = wkxObj.Geometry.parse(input);
-            geojson = geometry.toGeoJSON();
-        } 
-        // 2. 문자열인 경우
-        else if (typeof input === 'string') {
-            if (input.startsWith('{')) {
-                // GeoJSON
-                geojson = JSON.parse(input);
-            } else if (/^[0-9a-fA-F]+$/.test(input)) {
-                // WKB (Hex)
-                console.log("Loco Debug: WKB Hex detected");
-                let bufferData;
-                if (Buffer) {
-                    bufferData = Buffer.from(input, 'hex');
-                } else {
-                    bufferData = new Uint8Array(input.match(/.{1,2}/g).map(byte => parseInt(byte, 16)));
-                }
-                const geometry = wkxObj.Geometry.parse(bufferData);
-                geojson = geometry.toGeoJSON();
-            } else {
-                // WKT
-                console.log("Loco Debug: WKT detected:", input);
-                geojson = wellknown.parse(input);
-            }
-        }
-
-        if (geojson) {
-            renderOnMap(geojson);
-        }
-    } catch (e) {
-        console.error("Loco Error:", e);
-        document.getElementById('errorMessage').textContent = 'Error: ' + e.message;
-    }
-}
-    
-    // 렌더링 로직 분리 (가독성 위해)
-    function renderOnMap(geojson) {
-        if (currentLayer) map.removeLayer(currentLayer);
-        
-        currentLayer = L.geoJSON(geojson).addTo(map);
-        
-        // 데이터 위치로 지도 자동 이동
-        const bounds = currentLayer.getBounds();
-        if (bounds.isValid()) {
-            // 포인트(Point) 데이터의 경우 줌이 너무 당겨지는 것을 방지하기 위해 maxZoom 설정
-            map.fitBounds(bounds, { maxZoom: 16, padding: [50, 50] });
-        }
-    }
-
-    function clearMap() {
-        if (currentLayer) map.removeLayer(currentLayer);
-        currentLayer = null;
-        document.getElementById('dataInput').value = '';
-        document.getElementById('errorMessage').textContent = '';
-    }
-</script>
+<script src="js/spatial-parser.js"></script>
+<script src="js/map-renderer.js"></script>
+<script src="js/app.js"></script>
 
 </body>
 </html>
