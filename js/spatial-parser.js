@@ -59,6 +59,29 @@ const createSpatialParser = (function(wkx, wellknown, buffer, isBase64Lib) {
     }
 
     /**
+     * Removes backslashes escaping double quotes (common in log outputs).
+     * @param {string} s The string to clean.
+     * @returns {string} The cleaned string.
+     */
+    function cleanupEscapedQuotes(s) {
+        if (typeof s !== 'string') return s;
+        if (s.includes('\\"')) return s.replace(/\\"/g, '"');
+        return s;
+    }
+
+    /**
+     * Applies all string cleanup operations in sequence.
+     * @param {string} s The string to clean.
+     * @returns {string} The cleaned string.
+     */
+    function cleanStringInput(s) {
+        let cleaned = s;
+        cleaned = cleanupHexPrefix(cleaned);
+        cleaned = cleanupEscapedQuotes(cleaned);
+        return cleaned;
+    }
+
+    /**
      * Prepares the input by decoding Base64 if necessary and determining
      * if the final format is binary (Buffer) or string-based.
      * @param {*} rawInput The initial user input.
@@ -67,8 +90,8 @@ const createSpatialParser = (function(wkx, wellknown, buffer, isBase64Lib) {
     function prepareInput(rawInput) {
         let input = typeof rawInput === 'string' ? rawInput.trim() : rawInput;
         
-        if (typeof input !== 'string') {
-            throw new Error("Input must be a string.");
+        if (typeof input !== 'string' && !buffer.Buffer.isBuffer(input)) {
+            throw new Error("Input must be a string or Buffer.");
         }
         
         // Decode Base64 if needed
@@ -79,8 +102,8 @@ const createSpatialParser = (function(wkx, wellknown, buffer, isBase64Lib) {
         // Convert Buffer to string if applicable
         let strInput = typeof input === 'string' ? input : input.toString('utf8').trim();
         
-        // Clean up hex prefix (after decoding Base64)
-        strInput = cleanupHexPrefix(strInput);
+        // Apply string cleanup operations
+        strInput = cleanStringInput(strInput);
         
         // Check string-based formats
         if (isStringFormat(strInput)) {
