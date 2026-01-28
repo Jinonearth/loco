@@ -1,16 +1,25 @@
-window.LocoSpatialParser = (function(wkx,wellknown, buffer) {
+const createSpatialParser = (function(wkx, wellknown, buffer, isBase64Lib) {
 
     // Helper to check for different formats
     const isWkt = s => typeof s === 'string' && /^[A-Z]/.test(s) && s.includes('(');
     const isGeoJson = s => typeof s === 'string' && s.startsWith('{');
     const isHex = s => typeof s === 'string' && /^[0-9a-fA-F]+$/.test(s);
-    // More robust Base64 check to avoid misinterpreting other valid formats
+    
+    // Use is-base64 library for robust Base64 validation
     const isBase64 = s => {
-        if (typeof s !== 'string' || s.length % 4 !== 0 || !/^[A-Za-z0-9+\/]+={0,2}$/.test(s)) {
+        if (typeof s !== 'string') {
             return false;
         }
-        // Exclude things that are clearly not Base64 WKB
-        return !isWkt(s) && !isGeoJson(s) && !isHex(s);
+        // Exclude WKT and GeoJSON
+        if (isWkt(s) || isGeoJson(s)) {
+            return false;
+        }
+        // Exclude pure hex
+        if (isHex(cleanupHexPrefix(s))) {
+            return false;
+        }
+        // Use the library function
+        return isBase64Lib(s);
     };
 
     // Format checkers
@@ -69,6 +78,8 @@ window.LocoSpatialParser = (function(wkx,wellknown, buffer) {
         
         // Convert Buffer to string if applicable
         let strInput = typeof input === 'string' ? input : input.toString('utf8').trim();
+        
+        // Clean up hex prefix (after decoding Base64)
         strInput = cleanupHexPrefix(strInput);
         
         // Check string-based formats
@@ -127,5 +138,16 @@ window.LocoSpatialParser = (function(wkx,wellknown, buffer) {
     return { 
         parse 
     };
+});
 
-})(window.wkx, window.wellknown, window.buffer);
+// Browser compatibility
+if (typeof window !== 'undefined') {
+    // For browser, assume is-base64 is available globally or pass a simple check
+    window.LocoSpatialParser = createSpatialParser(window.wkx, window.wellknown, window.buffer, (s) => {
+        if (typeof s !== 'string' || s.length % 4 !== 0) return false;
+        return /^[A-Za-z0-9+\/]*={0,2}$/.test(s);
+    });
+}
+
+// Node.js compatibility
+export default createSpatialParser;
