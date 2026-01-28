@@ -140,14 +140,5 @@ const createSpatialParser = (function(wkx, wellknown, buffer, isBase64Lib) {
     };
 });
 
-// Browser compatibility
-if (typeof window !== 'undefined') {
-    // For browser, assume is-base64 is available globally or pass a simple check
-    window.LocoSpatialParser = createSpatialParser(window.wkx, window.wellknown, window.buffer, (s) => {
-        if (typeof s !== 'string' || s.length % 4 !== 0) return false;
-        return /^[A-Za-z0-9+\/]*={0,2}$/.test(s);
-    });
-}
-
 // Node.js compatibility
 export default createSpatialParser;

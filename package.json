@@ -4,11 +4,15 @@
   "description": "Spatial data parser",
   "type": "module",
   "scripts": {
-    "test": "node test/test-spatial-parser.js"
+    "test": "node test/test-spatial-parser.js",
+    "start": "serve -l 8080"
   },
   "dependencies": {
     "is-base64": "^1.1.0",
     "wellknown": "^0.5.0",
     "wkx": "^0.5.0"
+  },
+  "devDependencies": {
+    "serve": "^14.2.5"
   }
 }
